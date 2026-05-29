@@ -1,0 +1,34 @@
+Package: stanviz
+Title: Plotting Helpers for Stan Models
+Version: 0.0.0.9000
+Authors@R:
+    person("Metodi", "Latinov",
+           email = "your-email@example.com",
+           role = c("aut", "cre"))
+Description: Reusable ggplot2-based plotting functions for fitted Stan models,
+    covering prior and posterior predictive checks, MCMC diagnostics,
+    parameter posteriors, conditional effects, mediation decomposition,
+    prior sensitivity, and PSIS-LOO model comparison.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+Imports: 
+    bayesplot,
+    dplyr,
+    ggdist,
+    ggplot2,
+    patchwork,
+    posterior,
+    readr,
+    rlang,
+    stats,
+    tibble,
+    tidyr,
+    tools,
+    utils
+Suggests: 
+    cmdstanr,
+    loo,
+    priorsense,
+    rstan
+Config/roxygen2/version: 8.0.0
