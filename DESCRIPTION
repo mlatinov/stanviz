@@ -21,6 +21,7 @@ Imports:
     posterior,
     readr,
     rlang,
+    scales,
     stats,
     tibble,
     tidyr,

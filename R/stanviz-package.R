@@ -7,6 +7,8 @@
 #'
 #' @keywords internal
 #' @importFrom rlang .data %||%
+#' @importFrom stats sd weights
 "_PACKAGE"
 
-utils::globalVariables(c(".draw", ".chain", ".iteration"))
+utils::globalVariables(c(".draw", ".chain", ".iteration", ".lower", ".upper",
+                         "Parameter", "Value"))

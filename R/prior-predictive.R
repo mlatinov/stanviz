@@ -2,7 +2,7 @@
 # prior-predictive.R
 # -----------------------------------------------------------------------------
 # Prior predictive checks. The question these answer: "Before seeing the
-# data, does my model generate outcomes that are even remotely plausible?"
+# data,  does my model generate outcomes that are even remotely plausible?"
 #
 # Workflow assumption: you have run the SAME Stan program with the likelihood
 # switched off (e.g. a `prior_only` flag in `data`, or a separate
