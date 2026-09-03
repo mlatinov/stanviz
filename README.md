@@ -80,6 +80,12 @@ a lookup table when you’re not sure which function to reach for.
 | Function | Purpose |
 |----|----|
 | `plot_ppc_dens()` | Observed density vs. many replicates. |
+| `plot_ppc_ecdf()` | Observed vs. replicated empirical CDFs - tails/skew often show up here first. |
+| `plot_ppc_ecdf_grouped()` | `plot_ppc_ecdf()`, one panel per group. |
+| `plot_ppc_boxplot()` | Observed vs. a handful of replicated datasets, as boxplots. |
+| `plot_ppc_boxplot_grouped()` | `plot_ppc_boxplot()`, one panel per group. |
+| `plot_ppc_violin_grouped()` | Replicated distribution (violin) vs. observed, per group. |
+| `plot_ppc_violin()` | Single-panel `plot_ppc_violin_grouped()`. |
 | `plot_ppc_stat()` | Single test statistic, observed vs. replicates. |
 | `plot_ppc_stat_grid()` | Several test statistics at once (centre, spread, tails). |
 | `plot_ppc_intervals()` | Per-observation predictive intervals. |
@@ -114,7 +120,9 @@ a lookup table when you’re not sure which function to reach for.
 | `extract_ate_from_draws()` | Build ATE draws from per-arm Stan predictions. |
 | `plot_ate_posterior()` | Halfeye of the ATE. |
 | `plot_counterfactual_means()` | Marginal means under each arm. |
-| `plot_conditional_effect_draws()` | Partial-effect curve from a Stan predictor grid. |
+| `plot_conditional_effect_draws()` | Partial-effect curve from a tidy `(x, .draw, value[, group])` tibble. |
+| `plot_effect_curve()` | Posterior response curve straight off a Stan predictor grid (e.g. an SOD -> H2O2 dose-response). |
+| `plot_effect_curve_grouped()` | `plot_effect_curve()`, one curve per group, overlaid for direct comparison. |
 
 ### Mediation — *“how does the effect transmit?”*
 
@@ -180,6 +188,7 @@ argument, so you can deviate — but the defaults assume these:
 | `vector[N] pit` | `plot_ppc_pit()`. |
 | `real lprior` (alongside `log_lik`) | `priorsense` power-scaling functions. |
 | Per-arm vectors, e.g. `mu_treated`, `mu_control` | `extract_ate_from_draws()` and counterfactual plots. |
+| A predictor-grid vector, e.g. `vector[G] mu_grid` (or `array[K] vector[G] mu_grid` for `K` groups) | `plot_effect_curve()` / `plot_effect_curve_grouped()`. |
 | Mediation scalars: `direct_effect`, `total_effect`, `total_indirect_effect`, `NIE_*`, `proportion_mediated_*` | Mediation plots. |
 | Hierarchical: a vector of group effects (`alpha_j`), the grand mean (`mu`), the group SD (`tau`) | Hierarchical plots. |
 

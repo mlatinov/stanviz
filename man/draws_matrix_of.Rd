@@ -9,19 +9,28 @@ draws_matrix_of(model, var)
 \arguments{
 \item{model}{A fitted model (anything \code{\link[=as_draws_safe]{as_draws_safe()}} accepts).}
 
-\item{var}{Base name of a vector generated quantity.}
+\item{var}{Base name of a vector generated quantity, optionally with a
+trailing \verb{[i,j,...]} index/slice (blank slots mean "keep every value of
+this dimension").}
 }
 \value{
-A numeric matrix with \code{n_draws} rows and \code{N} columns.
+A numeric matrix with \code{n_draws} rows and one column per matched
+element.
 }
 \description{
 Many bayesplot \verb{ppc_*} functions want a matrix of dimension
 \verb{[n_draws, N]}. This builds that matrix from a Stan variable family such
-as \code{"y_rep"}, with columns ordered by observation index.
+as \code{"y_rep"}, with columns ordered by index. Nested/multi-dimensional
+families (\verb{array[J] vector[N]}, \verb{array[K] matrix[R, C]}, ...) work too:
+pass an R-array-style slice such as \code{"samples_combined[1,]"} to fix one
+dimension and keep every value of the rest as columns.
 }
 \examples{
 \dontrun{
 yrep <- draws_matrix_of(fit, "y_rep")
 dim(yrep)
+
+# array[3] vector[N] samples_combined -> first array slot, every N
+draws_matrix_of(fit, "samples_combined[1,]")
 }
 }

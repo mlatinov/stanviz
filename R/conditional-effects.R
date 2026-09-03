@@ -11,17 +11,19 @@
 
 
 # ---- internal helper ----
-# Tolerates either a vector family or a scalar parameter.
-# Not exported.
+# Tolerates either a vector family (including nested/multi-dimensional
+# containers and R-array-style slices, e.g. "samples_combined[1,]") or a
+# scalar parameter. Not exported.
 draws_matrix_of_or_scalar <- function(model, var) {
   draws    <- as_draws_safe(model)
   all_vars <- posterior::variables(draws)
-  if (any(grepl(paste0("^", var, "\\["), all_vars))) {
-    draws_matrix_of(model, var)
-  } else if (var %in% all_vars) {
-    as.numeric(posterior::extract_variable(draws, var))
+  res      <- resolve_stan_var(all_vars, var)
+  if (res$is_scalar) {
+    as.numeric(posterior::extract_variable(draws, res$hit_vars))
   } else {
-    stop(sprintf("Variable '%s' not found.", var))
+    m <- posterior::subset_draws(draws, variable = res$hit_vars) |>
+      posterior::as_draws_matrix()
+    m[, res$hit_vars, drop = FALSE]
   }
 }
 
@@ -175,15 +177,22 @@ plot_counterfactual_means <- function(
 
 #' Conditional effect from a grid of generated-quantity draws
 #'
-#' Posterior median + credible ribbon for an expected outcome computed across
-#' a predictor grid inside Stan's `generated quantities`.
+#' Posterior median + credible ribbon(s) for an expected outcome computed
+#' across a predictor grid inside Stan's `generated quantities`. If
+#' `draws_long` carries a `group` column, one coloured curve/ribbon is drawn
+#' per group instead of a single one - this is what powers
+#' [plot_effect_curve_grouped()], and lets you build custom grouped effect
+#' plots without going through a Stan variable name at all.
 #'
 #' Typical Stan-side setup: declare a grid of predictor values in `data`,
 #' then a corresponding `vector[G] mu_grid` in `generated quantities`.
 #' Extract those draws in R, tidy to long format with columns `x` (the grid
-#' value), `.draw`, `value`, and pass to this function.
+#' value), `.draw`, `value` (and optionally `group`), and pass to this
+#' function. [plot_effect_curve()] / [plot_effect_curve_grouped()] do this
+#' extraction for you directly off a fitted model.
 #'
-#' @param draws_long A tibble with columns `x`, `.draw`, and `value`.
+#' @param draws_long A tibble with columns `x`, `.draw`, `value`, and
+#'   optionally `group` (any type; coerced to factor).
 #' @param outcome_label Y-axis label.
 #' @param x_label X-axis label.
 #' @param .width Numeric vector of credible-interval widths.
@@ -201,22 +210,246 @@ plot_conditional_effect_draws <- function(
     x_label       = "predictor",
     .width        = c(0.66, 0.95)
 ) {
-  pal <- bayes_palette()
+  pal       <- bayes_palette()
+  has_group <- "group" %in% names(draws_long)
 
-  summ <- draws_long |>
-    dplyr::group_by(.data$x) |>
-    ggdist::median_qi(.data$value, .width = .width)
+  if (has_group) {
+    draws_long <- dplyr::mutate(draws_long, group = as.factor(.data$group))
+    summ <- draws_long |>
+      dplyr::group_by(.data$group, .data$x) |>
+      ggdist::median_qi(.data$value, .width = .width)
+  } else {
+    summ <- draws_long |>
+      dplyr::group_by(.data$x) |>
+      ggdist::median_qi(.data$value, .width = .width)
+  }
 
-  ggplot2::ggplot(summ, ggplot2::aes(x = .data$x, y = .data$value)) +
-    ggdist::geom_lineribbon(
-      ggplot2::aes(ymin = .data$.lower, ymax = .data$.upper),
-      fill = pal[["effect"]], alpha = 0.25
-    ) +
-    ggplot2::geom_line(colour = pal[["effect"]], linewidth = 1) +
+  base_aes <- if (has_group) {
+    ggplot2::aes(
+      x = .data$x, y = .data$value,
+      colour = .data$group, fill = .data$group
+    )
+  } else {
+    ggplot2::aes(x = .data$x, y = .data$value)
+  }
+
+  ggplot2::ggplot(summ, base_aes) +
+    {
+      if (has_group) {
+        ggdist::geom_lineribbon(
+          ggplot2::aes(ymin = .data$.lower, ymax = .data$.upper),
+          alpha = 0.25
+        )
+      } else {
+        ggdist::geom_lineribbon(
+          ggplot2::aes(ymin = .data$.lower, ymax = .data$.upper),
+          fill = pal[["effect"]], alpha = 0.25
+        )
+      }
+    } +
+    {
+      if (has_group) {
+        ggplot2::geom_line(linewidth = 1)
+      } else {
+        ggplot2::geom_line(colour = pal[["effect"]], linewidth = 1)
+      }
+    } +
     ggplot2::labs(
-      x = x_label, y = outcome_label,
+      x = x_label, y = outcome_label, colour = NULL, fill = NULL,
       title    = "Conditional effect",
       subtitle = "Posterior median with credible bands"
     ) +
     theme_bayes()
+}
+
+
+# ---- internal helper ----
+# Builds the (.draw, x, value[, group]) long tibble that both
+# plot_effect_curve() and plot_effect_curve_grouped() feed to
+# plot_conditional_effect_draws(). Reuses gather_indexed() rather than
+# re-implementing Stan variable extraction. Not exported.
+effect_curve_draws <- function(model, var, x, group = NULL) {
+  dl <- gather_indexed(model, var)
+  if (!("index" %in% names(dl))) {
+    stop(sprintf(
+      "'%s' resolves to more than one free dimension; slice it down to a single grid dimension (e.g. '%s[1,]').",
+      var, sub("\\[.*", "", var)
+    ), call. = FALSE)
+  }
+  n_grid <- length(unique(dl$index))
+  if (n_grid != length(x)) {
+    stop(sprintf(
+      "'%s' has %d grid point(s) but `x` has length %d.",
+      var, n_grid, length(x)
+    ), call. = FALSE)
+  }
+  dl$x <- x[dl$index]
+  if (!is.null(group)) dl$group <- group
+  dl
+}
+
+
+#' Posterior effect / response curve
+#'
+#' General-purpose posterior effect curve: how a model-implied outcome
+#' changes across a predictor grid, with posterior uncertainty. Unlike a
+#' smoothed fit through the raw observations, the curve and ribbon(s) come
+#' straight from posterior draws of a Stan-computed prediction grid - e.g. a
+#' `vector[G] mu_grid` evaluated at `G` predictor values in `generated
+#' quantities`.
+#'
+#' Built entirely on existing stanviz machinery: [gather_indexed()] pulls
+#' the grid draws off the model (nested/multi-dimensional grids can be
+#' reached with an index slice, e.g. `"mu_grid[1,]"` - see
+#' [gather_indexed()]), and [plot_conditional_effect_draws()] does the
+#' summarising and drawing.
+#'
+#' @param model A fitted Stan model (anything [as_draws_safe()] accepts).
+#' @param effect_var Name of the predictor-grid vector in `generated
+#'   quantities`, e.g. `"mu_grid"`. May be an R-array-style slice of a
+#'   nested/multi-dimensional container, e.g. `"mu_grid[1,]"`.
+#' @param x Numeric vector of predictor grid values, the same length and in
+#'   the same order as `effect_var`'s indices.
+#' @param x_obs,y_obs Optional numeric vectors of observed predictor/outcome
+#'   pairs, overlaid as points for reference. `NULL` (the default) omits
+#'   them. Note these are raw data, not part of the posterior curve itself.
+#' @param .width Numeric vector of credible-interval widths for the
+#'   ribbon(s); pass two values (the default) for a narrower and a wider
+#'   band.
+#' @param outcome_label Y-axis label.
+#' @param x_label X-axis label.
+#'
+#' @return A `ggplot` object.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' # e.g. an SOD -> H2O2 dose-response curve
+#' plot_effect_curve(
+#'   fit, "mu_grid", x = sod_grid,
+#'   x_obs = df$sod, y_obs = df$h2o2,
+#'   outcome_label = "H2O2", x_label = "SOD"
+#' )
+#' }
+plot_effect_curve <- function(
+    model,
+    effect_var,
+    x,
+    x_obs         = NULL,
+    y_obs         = NULL,
+    .width        = c(0.66, 0.95),
+    outcome_label = "outcome",
+    x_label       = "predictor"
+) {
+  draws_long <- effect_curve_draws(model, effect_var, x)
+
+  p <- plot_conditional_effect_draws(
+    draws_long,
+    outcome_label = outcome_label,
+    x_label       = x_label,
+    .width        = .width
+  ) +
+    ggplot2::labs(
+      title    = "Posterior effect curve",
+      subtitle = "Posterior median with credible band(s), from model draws"
+    )
+
+  if (!is.null(x_obs) && !is.null(y_obs)) {
+    obs <- tibble::tibble(x = x_obs, y = y_obs)
+    p <- p + ggplot2::geom_point(
+      data = obs, ggplot2::aes(x = .data$x, y = .data$y),
+      inherit.aes = FALSE, colour = "grey20", alpha = 0.5, size = 1.5
+    )
+  }
+  p
+}
+
+
+#' Posterior effect / response curves, by group
+#'
+#' Grouped counterpart to [plot_effect_curve()]: overlays one posterior
+#' effect curve per group in a single panel - e.g. separate treatment arms
+#' or biological conditions - so their shapes can be compared directly.
+#' Built on the exact same machinery as [plot_effect_curve()]: one
+#' [gather_indexed()] pull per group, stacked into a single long tibble and
+#' handed to [plot_conditional_effect_draws()], which draws one
+#' colour-coded curve/ribbon per group.
+#'
+#' @param model A fitted Stan model.
+#' @param effect_vars Named character vector: names become group labels,
+#'   values are the Stan grid-variable name (or index slice) for that
+#'   group's predictions. Example for a nested `array[2] vector[G] mu_grid`:
+#'   `c("Treated" = "mu_grid[1,]", "Control" = "mu_grid[2,]")`. Or, for two
+#'   separate generated quantities: `c("Treated" = "mu_grid_t", "Control" =
+#'   "mu_grid_c")`.
+#' @param x Numeric vector of predictor grid values, shared across groups,
+#'   the same length and order as each variable's indices.
+#' @param obs_data Optional data frame of observed points, overlaid as
+#'   points coloured by group. `NULL` (the default) omits them.
+#' @param x_col,y_col,group_col Column names to use within `obs_data`.
+#' @param .width Numeric vector of credible-interval widths for the
+#'   ribbon(s).
+#' @param outcome_label Y-axis label.
+#' @param x_label X-axis label.
+#'
+#' @return A `ggplot` object.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' plot_effect_curve_grouped(
+#'   fit,
+#'   effect_vars = c("Treated" = "mu_grid[1,]", "Control" = "mu_grid[2,]"),
+#'   x = sod_grid,
+#'   obs_data = df, x_col = "sod", y_col = "h2o2", group_col = "treatment"
+#' )
+#' }
+plot_effect_curve_grouped <- function(
+    model,
+    effect_vars,
+    x,
+    obs_data      = NULL,
+    x_col         = "x",
+    y_col         = "y",
+    group_col     = "group",
+    .width        = c(0.66, 0.95),
+    outcome_label = "outcome",
+    x_label       = "predictor"
+) {
+  if (is.null(names(effect_vars)) || any(!nzchar(names(effect_vars)))) {
+    stop("`effect_vars` must be a named character vector; names become group labels.", call. = FALSE)
+  }
+
+  draws_long <- dplyr::bind_rows(lapply(names(effect_vars), function(g) {
+    effect_curve_draws(model, effect_vars[[g]], x, group = g)
+  }))
+  draws_long <- dplyr::mutate(
+    draws_long,
+    group = factor(.data$group, levels = names(effect_vars))
+  )
+
+  p <- plot_conditional_effect_draws(
+    draws_long,
+    outcome_label = outcome_label,
+    x_label       = x_label,
+    .width        = .width
+  ) +
+    ggplot2::labs(
+      title    = "Posterior effect curves by group",
+      subtitle = "Posterior median with credible band(s), from model draws"
+    )
+
+  if (!is.null(obs_data)) {
+    obs <- tibble::tibble(
+      x     = obs_data[[x_col]],
+      y     = obs_data[[y_col]],
+      group = factor(obs_data[[group_col]], levels = names(effect_vars))
+    )
+    p <- p + ggplot2::geom_point(
+      data = obs,
+      ggplot2::aes(x = .data$x, y = .data$y, colour = .data$group),
+      inherit.aes = FALSE, alpha = 0.5, size = 1.5
+    )
+  }
+  p
 }

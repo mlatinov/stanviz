@@ -28,7 +28,11 @@
 #'
 #' @param model A fitted Stan model.
 #' @param group_var Name of the group-level vector in `parameters` or
-#'   `transformed parameters` (e.g. `"alpha_j"`).
+#'   `transformed parameters` (e.g. `"alpha_j"`). For a nested/
+#'   multi-dimensional container (e.g. `array[J] vector[K] u` or
+#'   `array[K] matrix[J, R] u`), pass an R-array-style slice that leaves the
+#'   group dimension free and fixes the rest, e.g. `"u[,1]"` for the first
+#'   component of every group.
 #' @param group_labels Optional character vector of group display names. Must
 #'   have length `J` (the number of groups). If `NULL`, groups are labelled
 #'   `"1"`, `"2"`, ....
@@ -40,6 +44,9 @@
 #' @examples
 #' \dontrun{
 #' extract_group_effects(fit, "alpha_j", group_labels = school_names)
+#'
+#' # array[J] vector[K] u -> every group's first component
+#' extract_group_effects(fit, "u[,1]", group_labels = school_names)
 #' }
 extract_group_effects <- function(
     model,
@@ -401,8 +408,7 @@ plot_ppc_by_group <- function(
   if (nrow(yrep) > n_draws) {
     yrep <- yrep[sample.int(nrow(yrep), n_draws), , drop = FALSE]
   }
-  group <- as.factor(group)
-  if (!is.null(group_labels)) levels(group) <- group_labels
+  group <- as_group_factor(group, group_labels)
 
   bayesplot::ppc_dens_overlay_grouped(
     y     = y,
@@ -429,8 +435,13 @@ plot_ppc_by_group <- function(
 #'
 #' @param model A `CmdStanMCMC` or `stanfit` object.
 #' @param group_var Name of the group-level vector (or `z` if non-centered).
+#'   For a nested/multi-dimensional container (e.g. `array[J] vector[K] z`),
+#'   pass the base name and use `which_group` to pick one element.
 #' @param tau_var Name of the group-level SD.
-#' @param which_group Which group index to plot on the y-axis. Defaults to 1.
+#' @param which_group Which group index to plot on the y-axis. A single
+#'   integer for a plain vector (the default, `1`), or an integer vector
+#'   giving one index per dimension for a nested/multi-dimensional
+#'   `group_var` (e.g. `c(1, 2)` for `group_var[1,2]`).
 #'
 #' @return A `ggplot` object.
 #' @export
@@ -438,6 +449,9 @@ plot_ppc_by_group <- function(
 #' @examples
 #' \dontrun{
 #' plot_funnel_diagnostic(fit, group_var = "z", tau_var = "tau")
+#'
+#' # array[J] vector[K] z -> group 1, component 2
+#' plot_funnel_diagnostic(fit, group_var = "z", which_group = c(1, 2))
 #' }
 plot_funnel_diagnostic <- function(
     model,
@@ -451,7 +465,8 @@ plot_funnel_diagnostic <- function(
 
   draws <- as_draws_safe(model)
   all_vars <- posterior::variables(draws)
-  group_name <- paste0(group_var, "[", which_group, "]")
+  which_group_str <- paste(which_group, collapse = ",")
+  group_name <- paste0(group_var, "[", which_group_str, "]")
   if (!(group_name %in% all_vars)) {
     stop(sprintf("Could not find '%s' in the draws.", group_name))
   }
@@ -481,7 +496,7 @@ plot_funnel_diagnostic <- function(
       colour = pal[["null"]], alpha = 0.9, size = 1.2
     ) +
     ggplot2::labs(
-      x = sprintf("%s[%d]", group_var, which_group),
+      x = sprintf("%s[%s]", group_var, which_group_str),
       y = sprintf("log(%s)", tau_var),
       title    = "Funnel diagnostic",
       subtitle = "Red points = divergent transitions",

@@ -1,6 +1,6 @@
 Package: stanviz
 Title: Plotting Helpers for Stan Models
-Version: 0.1.0
+Version: 0.2.0
 Authors@R:
     person("Metodi", "Latinov",
            email = "your-email@example.com",
@@ -19,7 +19,6 @@ Imports:
     ggplot2,
     patchwork,
     posterior,
-    readr,
     rlang,
     scales,
     stats,
@@ -27,9 +26,11 @@ Imports:
     tidyr,
     tools,
     utils
-Suggests: 
+Suggests:
     cmdstanr,
     loo,
     priorsense,
-    rstan
+    rstan,
+    testthat (>= 3.0.0)
 Config/roxygen2/version: 8.0.0
+Config/testthat/edition: 3

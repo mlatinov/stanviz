@@ -12,7 +12,8 @@ plot_conditional_effect_draws(
 )
 }
 \arguments{
-\item{draws_long}{A tibble with columns \code{x}, \code{.draw}, and \code{value}.}
+\item{draws_long}{A tibble with columns \code{x}, \code{.draw}, \code{value}, and
+optionally \code{group} (any type; coerced to factor).}
 
 \item{outcome_label}{Y-axis label.}
 
@@ -24,14 +25,20 @@ plot_conditional_effect_draws(
 A \code{ggplot} object.
 }
 \description{
-Posterior median + credible ribbon for an expected outcome computed across
-a predictor grid inside Stan's \verb{generated quantities}.
+Posterior median + credible ribbon(s) for an expected outcome computed
+across a predictor grid inside Stan's \verb{generated quantities}. If
+\code{draws_long} carries a \code{group} column, one coloured curve/ribbon is drawn
+per group instead of a single one - this is what powers
+\code{\link[=plot_effect_curve_grouped]{plot_effect_curve_grouped()}}, and lets you build custom grouped effect
+plots without going through a Stan variable name at all.
 }
 \details{
 Typical Stan-side setup: declare a grid of predictor values in \code{data},
 then a corresponding \verb{vector[G] mu_grid} in \verb{generated quantities}.
 Extract those draws in R, tidy to long format with columns \code{x} (the grid
-value), \code{.draw}, \code{value}, and pass to this function.
+value), \code{.draw}, \code{value} (and optionally \code{group}), and pass to this
+function. \code{\link[=plot_effect_curve]{plot_effect_curve()}} / \code{\link[=plot_effect_curve_grouped]{plot_effect_curve_grouped()}} do this
+extraction for you directly off a fitted model.
 }
 \examples{
 \dontrun{

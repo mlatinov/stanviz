@@ -10,7 +10,11 @@ extract_group_effects(model, group_var, group_labels = NULL)
 \item{model}{A fitted Stan model.}
 
 \item{group_var}{Name of the group-level vector in \code{parameters} or
-\verb{transformed parameters} (e.g. \code{"alpha_j"}).}
+\verb{transformed parameters} (e.g. \code{"alpha_j"}). For a nested/
+multi-dimensional container (e.g. \verb{array[J] vector[K] u} or
+\verb{array[K] matrix[J, R] u}), pass an R-array-style slice that leaves the
+group dimension free and fixes the rest, e.g. \code{"u[,1]"} for the first
+component of every group.}
 
 \item{group_labels}{Optional character vector of group display names. Must
 have length \code{J} (the number of groups). If \code{NULL}, groups are labelled
@@ -28,5 +32,8 @@ with one row per group per draw.
 \examples{
 \dontrun{
 extract_group_effects(fit, "alpha_j", group_labels = school_names)
+
+# array[J] vector[K] u -> every group's first component
+extract_group_effects(fit, "u[,1]", group_labels = school_names)
 }
 }

@@ -9,17 +9,30 @@ gather_indexed(model, var)
 \arguments{
 \item{model}{A fitted model (anything \code{\link[=as_draws_safe]{as_draws_safe()}} accepts).}
 
-\item{var}{Base name of the parameter family, e.g. \code{"mu"} or \code{"y_rep"}.}
+\item{var}{Base name of the parameter family, e.g. \code{"mu"} or \code{"y_rep"},
+optionally with a trailing \verb{[i,j,...]} index/slice (blank slots mean
+"keep every value of this dimension").}
 }
 \value{
-A \link[tibble:tibble]{tibble::tibble} with columns \code{.draw}, \code{param}, \code{value}, \code{index}.
+A \link[tibble:tibble]{tibble::tibble} with columns \code{.draw}, \code{param}, \code{value}, and
+either \code{index} (whenever exactly one dimension actually varies - a
+plain vector, or a slice of a nested container that fixes every
+dimension but one) or \code{index1}, \code{index2}, ... (one per dimension still
+varying, for an unsliced multi-dimensional family).
 }
 \description{
 Stan vector parameters arrive as \code{name[1]}, \code{name[2]}, .... This pulls a
-single family out and returns a long tibble with one row per draw per index.
+single family out and returns a long tibble with one row per draw per
+index. Nested/multi-dimensional families (\verb{array[J] vector[N]},
+\verb{array[K] matrix[R, C]}, ...) work too: pass the base name for every
+element, or an R-array-style slice such as \code{"samples_combined[1,]"} to
+fix one dimension and keep the rest.
 }
 \examples{
 \dontrun{
 gather_indexed(fit, "y_rep")
+
+# array[3] vector[N] samples_combined -> first array slot, every N
+gather_indexed(fit, "samples_combined[1,]")
 }
 }

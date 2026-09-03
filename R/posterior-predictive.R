@@ -47,6 +47,281 @@ plot_ppc_dens <- function(
 }
 
 
+#' Posterior predictive ECDF overlay
+#'
+#' Empirical-CDF counterpart to [plot_ppc_dens()]. Often shows tail and skew
+#' mismatches more clearly than an overlaid density, especially for
+#' bounded, skewed, or heavy-tailed outcomes.
+#'
+#' @param model A fitted Stan model (anything `as_draws_safe()` accepts).
+#' @param y Numeric vector of observed outcomes of length `N`.
+#' @param yrep_var Name of the replicated-outcome vector family in
+#'   `generated quantities`.
+#' @param n_draws Number of posterior draws to overlay.
+#' @param outcome_label X-axis label.
+#'
+#' @return A `ggplot` object.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' plot_ppc_ecdf(fit, y = df$y, yrep_var = "y_rep")
+#' }
+plot_ppc_ecdf <- function(
+    model,
+    y,
+    yrep_var      = "y_rep",
+    n_draws       = 100,
+    outcome_label = "outcome"
+) {
+  yrep <- draws_matrix_of(model, yrep_var)
+  if (nrow(yrep) > n_draws) {
+    yrep <- yrep[sample.int(nrow(yrep), n_draws), , drop = FALSE]
+  }
+
+  bayesplot::ppc_ecdf_overlay(y = y, yrep = yrep) +
+    ggplot2::labs(
+      x        = outcome_label,
+      title    = "Posterior predictive check: ECDF",
+      subtitle = "Observed (dark) vs. replicated (light) empirical CDFs",
+      caption  = "Gaps concentrated in the tails point to skew or shape the model isn't capturing."
+    ) +
+    theme_bayes()
+}
+
+
+#' Posterior predictive ECDF overlay, by group
+#'
+#' Grouped counterpart to [plot_ppc_ecdf()]: one panel per group, so you can
+#' see whether the model reproduces the observed distribution's shape
+#' equally well across treatment arms, sites, days, etc.
+#'
+#' @param model A fitted Stan model.
+#' @param y Numeric vector of observed outcomes, length `N`.
+#' @param group Integer or factor vector of group memberships, length `N`.
+#' @param yrep_var Name of the replicated-outcome vector family.
+#' @param n_draws Number of posterior draws to overlay per facet.
+#' @param group_labels Optional character vector of group display labels.
+#' @param outcome_label X-axis label.
+#'
+#' @return A `ggplot` object.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' plot_ppc_ecdf_grouped(fit, y = df$y, group = df$treatment)
+#' }
+plot_ppc_ecdf_grouped <- function(
+    model,
+    y,
+    group,
+    yrep_var      = "y_rep",
+    n_draws       = 50,
+    group_labels  = NULL,
+    outcome_label = "outcome"
+) {
+  yrep <- draws_matrix_of(model, yrep_var)
+  if (nrow(yrep) > n_draws) {
+    yrep <- yrep[sample.int(nrow(yrep), n_draws), , drop = FALSE]
+  }
+  group <- as_group_factor(group, group_labels)
+
+  bayesplot::ppc_ecdf_overlay_grouped(y = y, yrep = yrep, group = group) +
+    ggplot2::labs(
+      x        = outcome_label,
+      title    = "Posterior predictive check by group: ECDF",
+      subtitle = "Observed (dark) vs. replicated (light) empirical CDFs, within each group"
+    ) +
+    theme_bayes()
+}
+
+
+#' Posterior predictive boxplots
+#'
+#' Observed outcome and a handful of replicated datasets, each shown as a
+#' box-and-whisker plot. Complements [plot_ppc_dens()] / [plot_ppc_ecdf()]:
+#' coarser, but makes median/IQR/outlier mismatches easy to read at a
+#' glance. `yrep` is downsampled hard (`n_draws` defaults to `8`) because,
+#' unlike the overlay plots, every retained draw gets its own box.
+#'
+#' @param model A fitted Stan model.
+#' @param y Numeric vector of observed outcomes.
+#' @param yrep_var Name of the replicated-outcome vector family.
+#' @param n_draws Number of replicated datasets to draw as boxes.
+#' @param outcome_label Y-axis label.
+#'
+#' @return A `ggplot` object.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' plot_ppc_boxplot(fit, y = df$y, yrep_var = "y_rep")
+#' }
+plot_ppc_boxplot <- function(
+    model,
+    y,
+    yrep_var      = "y_rep",
+    n_draws       = 8,
+    outcome_label = "outcome"
+) {
+  yrep <- draws_matrix_of(model, yrep_var)
+  if (nrow(yrep) > n_draws) {
+    yrep <- yrep[sample.int(nrow(yrep), n_draws), , drop = FALSE]
+  }
+
+  bayesplot::ppc_boxplot(y = y, yrep = yrep) +
+    ggplot2::labs(
+      y        = outcome_label,
+      title    = "Posterior predictive check: boxplots",
+      subtitle = "Observed (y) vs. a handful of replicated datasets (yrep)",
+      caption  = "yrep is downsampled to n_draws replicated datasets so each box stays readable."
+    ) +
+    theme_bayes()
+}
+
+
+#' Posterior predictive boxplots, by group
+#'
+#' Grouped counterpart to [plot_ppc_boxplot()]. bayesplot has no built-in
+#' grouped boxplot, so this stitches one [plot_ppc_boxplot()]-style panel
+#' per group together with `patchwork`, the same small-multiples approach
+#' [plot_ppc_stat_grid()] uses.
+#'
+#' @param model A fitted Stan model.
+#' @param y Numeric vector of observed outcomes, length `N`.
+#' @param group Integer or factor vector of group memberships, length `N`.
+#' @param yrep_var Name of the replicated-outcome vector family.
+#' @param n_draws Number of replicated datasets to draw as boxes, per group.
+#' @param group_labels Optional character vector of group display labels.
+#' @param outcome_label Y-axis label, shared across panels.
+#' @param ncol Number of facet columns; `NULL` lets `patchwork` choose.
+#'
+#' @return A `patchwork` composite `ggplot` object.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' plot_ppc_boxplot_grouped(fit, y = df$y, group = df$treatment)
+#' }
+plot_ppc_boxplot_grouped <- function(
+    model,
+    y,
+    group,
+    yrep_var      = "y_rep",
+    n_draws       = 8,
+    group_labels  = NULL,
+    outcome_label = "outcome",
+    ncol          = NULL
+) {
+  yrep  <- draws_matrix_of(model, yrep_var)
+  group <- as_group_factor(group, group_labels)
+
+  plots <- lapply(levels(group), function(g) {
+    keep <- group == g
+    yrep_g <- yrep[, keep, drop = FALSE]
+    if (nrow(yrep_g) > n_draws) {
+      yrep_g <- yrep_g[sample.int(nrow(yrep_g), n_draws), , drop = FALSE]
+    }
+    bayesplot::ppc_boxplot(y = y[keep], yrep = yrep_g) +
+      ggplot2::labs(title = g, y = NULL) +
+      theme_bayes(base_size = 10)
+  })
+
+  patchwork::wrap_plots(plots, ncol = ncol) +
+    patchwork::plot_annotation(
+      title    = "Posterior predictive check by group: boxplots",
+      subtitle = paste0(outcome_label, ": observed vs. replicated, within each group"),
+      theme    = theme_bayes()
+    )
+}
+
+
+#' Posterior predictive violins, by group
+#'
+#' Density estimate of the replicated draws within each group, shown as a
+#' violin, with the observed outcome overlaid. Reveals whether the spread
+#' *and* shape of the predictive distribution track the data equally well
+#' across groups, not just the central tendency.
+#'
+#' @param model A fitted Stan model.
+#' @param y Numeric vector of observed outcomes, length `N`.
+#' @param group Integer or factor vector of group memberships, length `N`.
+#' @param yrep_var Name of the replicated-outcome vector family.
+#' @param group_labels Optional character vector of group display labels.
+#' @param outcome_label Y-axis label.
+#'
+#' @return A `ggplot` object.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' plot_ppc_violin_grouped(fit, y = df$y, group = df$treatment)
+#' }
+plot_ppc_violin_grouped <- function(
+    model,
+    y,
+    group,
+    yrep_var      = "y_rep",
+    group_labels  = NULL,
+    outcome_label = "outcome"
+) {
+  yrep  <- draws_matrix_of(model, yrep_var)
+  group <- as_group_factor(group, group_labels)
+
+  bayesplot::ppc_violin_grouped(y = y, yrep = yrep, group = group) +
+    ggplot2::labs(
+      y        = outcome_label,
+      title    = "Posterior predictive check by group: violins",
+      subtitle = "Replicated distribution (violin) vs. observed outcome, within each group"
+    ) +
+    theme_bayes()
+}
+
+
+#' Posterior predictive violin
+#'
+#' Single-panel counterpart to [plot_ppc_violin_grouped()]: the replicated
+#' draws' distribution as one violin, with the observed outcome overlaid.
+#' Implemented as a thin wrapper - every observation is put in one dummy
+#' group - so it shares its rendering with the grouped version rather than
+#' duplicating it.
+#'
+#' @param model A fitted Stan model.
+#' @param y Numeric vector of observed outcomes.
+#' @param yrep_var Name of the replicated-outcome vector family.
+#' @param outcome_label Y-axis label.
+#'
+#' @return A `ggplot` object.
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' plot_ppc_violin(fit, y = df$y, yrep_var = "y_rep")
+#' }
+plot_ppc_violin <- function(
+    model,
+    y,
+    yrep_var      = "y_rep",
+    outcome_label = "outcome"
+) {
+  dummy_group <- factor(rep("", length(y)))
+
+  plot_ppc_violin_grouped(
+    model, y = y, group = dummy_group,
+    yrep_var = yrep_var, outcome_label = outcome_label
+  ) +
+    ggplot2::labs(
+      title    = "Posterior predictive check: violin",
+      subtitle = "Replicated distribution (violin) vs. observed outcome"
+    ) +
+    ggplot2::theme(
+      legend.position = "none",
+      axis.text.x     = ggplot2::element_blank(),
+      axis.ticks.x    = ggplot2::element_blank()
+    )
+}
+
+
 #' Posterior predictive test statistic
 #'
 #' Compare a single test statistic between observed and replicated data.

@@ -9,11 +9,16 @@ plot_funnel_diagnostic(model, group_var, tau_var = "tau", which_group = 1)
 \arguments{
 \item{model}{A \code{CmdStanMCMC} or \code{stanfit} object.}
 
-\item{group_var}{Name of the group-level vector (or \code{z} if non-centered).}
+\item{group_var}{Name of the group-level vector (or \code{z} if non-centered).
+For a nested/multi-dimensional container (e.g. \verb{array[J] vector[K] z}),
+pass the base name and use \code{which_group} to pick one element.}
 
 \item{tau_var}{Name of the group-level SD.}
 
-\item{which_group}{Which group index to plot on the y-axis. Defaults to 1.}
+\item{which_group}{Which group index to plot on the y-axis. A single
+integer for a plain vector (the default, \code{1}), or an integer vector
+giving one index per dimension for a nested/multi-dimensional
+\code{group_var} (e.g. \code{c(1, 2)} for \code{group_var[1,2]}).}
 }
 \value{
 A \code{ggplot} object.
@@ -30,5 +35,8 @@ Requires a CmdStanR or rstan fit (needs sampler diagnostics).
 \examples{
 \dontrun{
 plot_funnel_diagnostic(fit, group_var = "z", tau_var = "tau")
+
+# array[J] vector[K] z -> group 1, component 2
+plot_funnel_diagnostic(fit, group_var = "z", which_group = c(1, 2))
 }
 }
