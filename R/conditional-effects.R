@@ -237,12 +237,12 @@ plot_conditional_effect_draws <- function(
     {
       if (has_group) {
         ggdist::geom_lineribbon(
-          ggplot2::aes(ymin = .data$.lower, ymax = .data$.upper),
+          ggplot2::aes(ymin = .data$.lower, ymax = .data$.upper, group = interaction(.data$group, .data$.width)),
           alpha = 0.25
         )
       } else {
         ggdist::geom_lineribbon(
-          ggplot2::aes(ymin = .data$.lower, ymax = .data$.upper),
+          ggplot2::aes(ymin = .data$.lower, ymax = .data$.upper, group = .data$.width),
           fill = pal[["effect"]], alpha = 0.25
         )
       }
